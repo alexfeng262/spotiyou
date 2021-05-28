@@ -8,6 +8,7 @@ import youtube_dl
 import os
 import shutil
 import re
+import eyed3
 logging.basicConfig(level=logging.INFO, 
                     #bfilename=cfg.LOG_FILE_DIR, #'../logs/myfirstlog.log',
                     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 base_url = 'https://www.youtube.com/watch?v='
 SAVE_PATH = 'tmp'
-SONG_PATH = 'songs/'  
+SONG_PATH = 'songs/liked_songs/'  
 ydl_opts = {
     'format': 'bestaudio/best',
     'postprocessors': [{
@@ -37,6 +38,7 @@ def get_song_data(results):
         song_data = {
             'artist_name': track['artists'][0]['name'],
             'song_name': track['name'],
+            'album_name': track['album']['name'],
             'spotify_id': track['id'],
             'image_url': track['album']['images'][0]['url'],
             'image_width': track['album']['images'][0]['width'],
@@ -50,6 +52,7 @@ def get_all_user_saved_tracks(sp):
     column_names = [
         'artist_name',
         'song_name',
+        'album_name',
         'spotify_id',
         'image_url',
         'image_width',
@@ -70,9 +73,16 @@ def get_all_user_saved_tracks(sp):
     
     return df
 
-def download_song(song_name):
+def set_song_tag(song_filename, row):
+    audiofile = eyed3.load(song_filename)
+    audiofile.tag.artist = row['artist_name'].values[0]
+    audiofile.tag.title = row['song_name'].values[0]
+    audiofile.tag.album = row['album_name'].values[0]
+    audiofile.tag.save()
+
+def download_song(row):
     # for idx, row in db.iterrows():
-    
+    song_name = f"{row['artist_name'].values[0]} - {row['song_name'].values[0]}"
     download_youtube(song_name)
     downloaded_filename = os.listdir(SAVE_PATH)[0]
     
@@ -82,8 +92,11 @@ def download_song(song_name):
         os.path.join(SAVE_PATH,downloaded_filename),
         os.path.join(SONG_PATH,song_name+'.mp3')
     )
+    set_song_tag(os.path.join(SONG_PATH,song_name+'.mp3'), row)
     logger.info(f'Search for --> {song_name}')
     logger.info(f'Downloaded audio title -> {downloaded_filename}')
+
+
 
 if __name__  == '__main__':
     df_database = pd.read_csv('database.csv')
@@ -107,9 +120,9 @@ if __name__  == '__main__':
     
     for idx in diff:
         row = df_query[df_query['spotify_id']==idx]
-        song_name = f"{row['artist_name'].values[0]} - {row['song_name'].values[0]}"
+        
         df_database = df_database.append(row)
-        download_song(song_name)
+        download_song( row)
     #print(df_database)
     df_database.to_csv('database.csv',index=False)
     logger.info(f'Added {len(diff)} songs to database')
@@ -120,7 +133,8 @@ TODO:
 [x] Delete duplicated songs
 [x] Download song from youtube
 [x] Rename downloaded song
-[] Change tag mp3
+[x] Add album info
+[x] Change tag mp3
 [x] Keep csv as database and other with new results, then only process new songs
 [] Keep track of some variables for automation.
 [] Add support for download mood playlist
